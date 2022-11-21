@@ -1,3 +1,6 @@
+using CurrencyExchanger.Models;
+using CurrencyExchanger.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using Serilog;
 
@@ -5,6 +8,7 @@ using Serilog;
 
 
 var builder = WebApplication.CreateBuilder(args);
+ConfigurationManager configuration = builder.Configuration;
 
 //create the logger and setup your sinks, filters and properties
 builder.Host.UseSerilog((hostContext, services, configuration) =>
@@ -17,7 +21,10 @@ builder.Host.UseSerilog((hostContext, services, configuration) =>
 });
 
 // Add services to the container.
+builder.Services.AddMemoryCache();
 
+builder.Services.AddDbContext<ExchangeServiceDBContext>(opt => opt.UseSqlServer(configuration.GetSection("ConnectionString").Value));
+builder.Services.AddScoped<IExchangeServiceRepo>();
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
