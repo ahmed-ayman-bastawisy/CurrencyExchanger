@@ -47,20 +47,23 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-//Apply Migrations
-using (var scope = app.Services.CreateScope())
-{
-    var dataContext = scope.ServiceProvider.GetRequiredService<ExchangeServiceDBContext>();
-    try
-    {
-        dataContext.Database.Migrate();
 
-    }
-    catch (Exception)
-    {
-        
-    }
-}
+#region Auto Apply Migrations
+//using (var scope = app.Services.CreateScope())
+//{
+//    var dataContext = scope.ServiceProvider.GetRequiredService<ExchangeServiceDBContext>();
+//    try
+//    {
+//        dataContext.Database.Migrate();
+
+//    }
+//    catch (Exception)
+//    {
+
+//    }
+//} 
+#endregion
+
 app.UseAuthorization();
 
 app.MapControllers();
