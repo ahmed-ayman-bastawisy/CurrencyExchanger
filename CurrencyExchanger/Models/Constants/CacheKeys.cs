@@ -10,5 +10,6 @@ namespace CurrencyExchanger.Models.Constants
     public static class CacheKeys
     {
         public const string RealTimeRatesKey = "RealTimeRatesKey";
+        public const string TestCacheKey = "TestKey";
     }
 }

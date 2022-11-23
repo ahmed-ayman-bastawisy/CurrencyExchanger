@@ -4,10 +4,11 @@ using Serilog;
 using CurrencyExchanger.Models.APIModels;
 using System.Text.Json;
 using System.Net;
-using CurrencyExchanger.Repositories;
 using CurrencyExchanger.Models.Database;
 using CurrencyExchanger.Services;
 using CurrencyExchanger.Models.Constants;
+using CurrencyExchanger.Repositories.ExchangeRepo;
+using Microsoft.IdentityModel.Tokens;
 
 namespace CurrencyExchanger.Controllers
 {
@@ -44,7 +45,7 @@ namespace CurrencyExchanger.Controllers
         {
             try
             {
-                var result = _cache.TryGetValue(CacheKeys.RealTimeRatesKey, out RatesResponseModel? cachedRealTimeRates);
+                (bool result, RatesResponseModel? cachedRealTimeRates) = _cache.GetCachedObject<RatesResponseModel>(CacheKeys.RealTimeRatesKey);
                 RatesResponseModel? realTimeRates = cachedRealTimeRates?.Clone() as RatesResponseModel;
                 int statusCode = (int)HttpStatusCode.OK;
                 bool differentBase = !string.IsNullOrEmpty(baseCurrency) && realTimeRates?.baseCurrecny != baseCurrency;
@@ -53,14 +54,9 @@ namespace CurrencyExchanger.Controllers
                 {
                     message = ResponseMessages.FoundInCache;
                     Log.Logger.Information("Rates" + message);
-                    if (!string.IsNullOrEmpty(symbols))
-                    {
-                        Log.Logger.Information("Specific symbols required, start filtering the rates to get required symbols");
-                        realTimeRates.FilterSymbols(symbols, baseCurrency);
-                    }
+                    if (!string.IsNullOrEmpty(symbols)) realTimeRates.FilterSymbols(symbols, baseCurrency);
                     if (differentBase)
                     {
-                        Log.Logger.Information("Base currency is different from the cached rates, start calculating the new currency from the cached model");
                         if (!realTimeRates.GetExchangeRatesForDifferentCurrency(baseCurrency))
                             return BadRequest(new ResponseModel() { Message = "Cannot Get the base currency rate" });
                     }
@@ -75,21 +71,15 @@ namespace CurrencyExchanger.Controllers
                     var responseContent = response.response?.ResponseObj;
 
                     if (statusCode != (int)HttpStatusCode.OK)
-                        return StatusCode(statusCode, new ResponseModel() { ResponseObj = JsonSerializer.Deserialize<object?>((string?)responseContent)});
+                        return StatusCode(statusCode, new ResponseModel() { ResponseObj = JsonSerializer.Deserialize<object?>((string?)responseContent) });
 
                     RatesResponseModel LiveRealTimeRates = responseContent != null ? JsonSerializer.Deserialize<RatesResponseModel>((string)responseContent) : null;
+                   
                     realTimeRates = LiveRealTimeRates == null ? null : (RatesResponseModel)LiveRealTimeRates.Clone();
-                    if (!string.IsNullOrEmpty(symbols))
-                    {
-                        Log.Logger.Information("Specific symbols required, start filtering the rates to get required symbols");
-                        realTimeRates?.FilterSymbols(symbols, baseCurrency);
-                    }
-                    MemoryCacheEntryOptions cacheEntryOptions = new MemoryCacheEntryOptions()
-                        .SetPriority(CacheItemPriority.High)
-                        .SetSlidingExpiration(TimeSpan.FromMinutes(20))
-                        .SetAbsoluteExpiration(TimeSpan.FromMinutes(29));
+                    
+                    if (!string.IsNullOrEmpty(symbols)) realTimeRates?.FilterSymbols(symbols, baseCurrency);
 
-                    _cache.Set(CacheKeys.RealTimeRatesKey, LiveRealTimeRates, cacheEntryOptions);
+                    _cache.AddCachedObject(CacheKeys.RealTimeRatesKey, LiveRealTimeRates, TimeSpan.FromMinutes(20), TimeSpan.FromMinutes(29), CacheItemPriority.High);
 
                 }
                 return StatusCode(statusCode, new ResponseGeneric<RatesResponseModel>() { ResponseObj = realTimeRates, Message = message });
@@ -130,13 +120,6 @@ namespace CurrencyExchanger.Controllers
                     Log.Error(message);
                     return BadRequest(new ResponseModel() { Message = message });
                 }
-                var clienttrades = _exchangeServiceRepo.GetClientExchangeTrades(parameters.clientId)?.Count(e => e.PerformedAt > DateTime.UtcNow.AddHours(-1));
-                if (clienttrades >= 10)
-                {
-                    string message = $"client with id {parameters.clientId} exceeded the exchange trade amount per hour";
-                    Log.Information(message);
-                    return BadRequest(new ResponseModel() { Message = message });
-                }
                 Exchange? exchange = new()
                 {
                     ClientId = parameters.clientId,
@@ -145,29 +128,26 @@ namespace CurrencyExchanger.Controllers
                     FromAmount = fromAmount,
                     PerformedAt = DateTime.UtcNow,
                 };
-                var exchangeRate = _cache.TryGetValue(CacheKeys.RealTimeRatesKey, out RatesResponseModel? realTimeRates) ? realTimeRates?.GetExchangeRate(parameters.from, parameters.to) : null;
+
+                var response = await GetRealTimeRates(parameters.from) as ObjectResult;
+                var realTimeRates = (response?.Value as ResponseGeneric<RatesResponseModel>)?.ResponseObj ?? null;
+                var exchangeRate = realTimeRates?.GetExchangeRate(parameters.from, parameters.to);
+
                 if (exchangeRate != null)
                 {
                     exchange.ToAmount = fromAmount * exchangeRate.Rate;
                     exchange.Rate = exchangeRate.Rate;
                     exchange.Succeded = true;
-                    _exchangeServiceRepo.AddExchnageTrade(exchange);
-                }
-                else
-                {
-                    var response = await GetRealTimeRates(parameters.from) as ObjectResult;
-                    realTimeRates = (response?.Value as ResponseGeneric<RatesResponseModel>)?.ResponseObj ?? null;
-                    exchangeRate = realTimeRates?.GetExchangeRate(parameters.from, parameters.to);
-                    if (exchangeRate != null)
+                    var clienttrades = _exchangeServiceRepo.AddExchnageTrade(exchange);
+                    if (!clienttrades.result )
                     {
-                        exchange.ToAmount = fromAmount * exchangeRate.Rate;
-                        exchange.Rate = exchangeRate.Rate;
-                        exchange.Succeded = true;
-                        _exchangeServiceRepo.AddExchnageTrade(exchange);
+                        var message = !string.IsNullOrEmpty(clienttrades.message) ? 
+                            clienttrades.message : "something went wrong while adding the exchange trade";
+                        Log.Information(message);
+                        return BadRequest(new ResponseModel() { Message = message });
                     }
-
+                    return Ok(new ResponseGeneric<Exchange>() { ResponseObj = exchange });
                 }
-                if (exchange.Succeded) return Ok(new ResponseGeneric<Exchange>() { ResponseObj = exchange });
                 else
                     return BadRequest(new ResponseGeneric<Exchange>() { ResponseObj = exchange, Message = "Something went wrong when trying to make exchange trade" });
             }

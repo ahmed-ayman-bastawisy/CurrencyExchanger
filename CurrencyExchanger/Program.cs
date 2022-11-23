@@ -1,5 +1,5 @@
 using CurrencyExchanger.Models;
-using CurrencyExchanger.Repositories;
+using CurrencyExchanger.Repositories.ExchangeRepo;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using Serilog;

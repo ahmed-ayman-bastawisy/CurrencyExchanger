@@ -20,6 +20,7 @@ namespace CurrencyExchanger.Services
         {
             try
             {
+                Log.Logger.Information("Base currency is different from the cached rates, start calculating the new currency from the cached model");
                 if (!cachedRates.rates.ContainsKey(baseCurrency)) return false; 
                 Dictionary<string, decimal> calculatedRates = new();
                 var basecurrencyRate = 1 / cachedRates.rates[baseCurrency];
@@ -31,9 +32,10 @@ namespace CurrencyExchanger.Services
                 cachedRates.baseCurrecny = baseCurrency;
                 return true;
             }
-            catch (Exception)
+            catch (Exception e)
             {
                 Log.Error($"Something went wrong while calculating the exchange rates for {baseCurrency} currency");
+                Log.Error(e.ToString());
                 return false;
             }
         }
@@ -50,14 +52,16 @@ namespace CurrencyExchanger.Services
         {
             try
             {
+                Log.Logger.Information("Specific symbols required, start filtering the rates to get required symbols");
                 var symbolsList = symbols.Split(',').ToList();
                 if (!string.IsNullOrEmpty(baseCurrency) && rates.rates.ContainsKey(baseCurrency)) symbolsList.Add(baseCurrency);
                 rates.rates = rates.rates.Where(k => symbolsList?.Contains(k.Key) == true).ToDictionary(r => r.Key, v => v.Value);
                 return true;
             }
-            catch (Exception)
+            catch (Exception e)
             {
                 Log.Error($"Something went wrong while filtering the exchange rates");
+                Log.Error(e.ToString());
                 return false;
             }
         }
@@ -86,10 +90,11 @@ namespace CurrencyExchanger.Services
                     return new() { From = from, To = to, Rate = Math.Round(rates.rates[to] / rates.rates[from], 9) };
                 }
             }
-            catch (Exception)
+            catch (Exception e)
             {
 
                 Log.Error("Something went wrong while calculating the exchange rate");
+                Log.Error(e.ToString());
                 return null;
             }
         }
@@ -123,6 +128,7 @@ namespace CurrencyExchanger.Services
             }
             catch (Exception e)
             {
+                Log.Error("Something went wrong while sending API request");
                 Log.Error(e.ToString());
                 return (HttpStatusCode.BadRequest, new ResponseModel() { Message = "Something went wrong while sending API request" });
             }
@@ -166,6 +172,7 @@ namespace CurrencyExchanger.Services
             }
             catch (Exception e)
             {
+                Log.Error("Something went wrong while trying to make exchange trade");
                 Log.Error(e.ToString());
                 return (HttpStatusCode.BadRequest, new ResponseModel() { Message = "Something went wrong while trying to make exchange trade" });
             }
