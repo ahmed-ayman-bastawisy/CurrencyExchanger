@@ -1,132 +1,115 @@
 {
-	"id": "5cca7314-a534-aa64-4306-4209006c4b81",
-	"name": "CurrencyExchangerMicroservice",
-	"description": "collection of requests to test CurrencyExchangerMicroservice project",
-	"order": [],
-	"folders": [
+	"variables": [],
+	"info": {
+		"name": "CurrencyExchangerMicroservice",
+		"_postman_id": "5cca7314-a534-aa64-4306-4209006c4b81",
+		"description": "collection of requests to test CurrencyExchangerMicroservice project",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
+	},
+	"item": [
 		{
 			"name": "API Integration",
 			"description": "api used to integrate with rate exhanger apis",
-			"collectionId": "5cca7314-a534-aa64-4306-4209006c4b81",
-			"order": [
-				"cbf70531-94ac-2d82-8e27-c6f805ff415c",
-				"9d47f856-960f-92a7-2f55-c9de809dff7b"
-			],
-			"owner": 0,
-			"folders_order": [],
-			"id": "a35eb816-d128-74ad-d550-985cd39184b7"
-		}
-	],
-	"folders_order": [
-		"a35eb816-d128-74ad-d550-985cd39184b7"
-	],
-	"timestamp": 1668940521763,
-	"owner": 0,
-	"public": false,
-	"requests": [
-		{
-			"id": "9d47f856-960f-92a7-2f55-c9de809dff7b",
-			"headers": "apikey: {{apikey}}\n",
-			"headerData": [
+			"item": [
 				{
-					"key": "apikey",
-					"value": "{{apikey}}",
-					"description": "",
-					"enabled": true
-				}
-			],
-			"url": "http://localhost:5249/api/exchange?amount=5&from=EUR&to=USD&date",
-			"folder": "a35eb816-d128-74ad-d550-985cd39184b7",
-			"queryParams": [
-				{
-					"key": "amount",
-					"value": "5",
-					"equals": true,
-					"description": "",
-					"enabled": true
+					"name": "get real time rates API",
+					"request": {
+						"url": {
+							"raw": "http://localhost:5249/api/rates?baseCurrency=&symbols=",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5249",
+							"path": [
+								"api",
+								"rates"
+							],
+							"query": [
+								{
+									"key": "baseCurrency",
+									"value": "",
+									"equals": true,
+									"description": ""
+								},
+								{
+									"key": "symbols",
+									"value": "",
+									"equals": true,
+									"description": ""
+								}
+							],
+							"variable": []
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{apikey}}",
+								"description": ""
+							}
+						],
+						"body": {},
+						"description": "send get request to get real time exchnage rates"
+					},
+					"response": []
 				},
 				{
-					"key": "from",
-					"value": "EUR",
-					"equals": true,
-					"description": "",
-					"enabled": true
-				},
-				{
-					"key": "to",
-					"value": "USD",
-					"equals": true,
-					"description": "",
-					"enabled": true
-				},
-				{
-					"key": "date",
-					"value": "",
-					"equals": false,
-					"description": "",
-					"enabled": true
+					"name": "Convert currency API",
+					"request": {
+						"url": {
+							"raw": "http://localhost:5249/api/exchange?clientId=1&amount=5&from=EUR&to=USD",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "5249",
+							"path": [
+								"api",
+								"exchange"
+							],
+							"query": [
+								{
+									"key": "clientId",
+									"value": "1",
+									"equals": true,
+									"description": ""
+								},
+								{
+									"key": "amount",
+									"value": "5",
+									"equals": true,
+									"description": ""
+								},
+								{
+									"key": "from",
+									"value": "EUR",
+									"equals": true,
+									"description": ""
+								},
+								{
+									"key": "to",
+									"value": "USD",
+									"equals": true,
+									"description": ""
+								}
+							],
+							"variable": []
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "apikey",
+								"value": "{{apikey}}",
+								"description": ""
+							}
+						],
+						"body": {},
+						"description": "send get request to get real time exchnage rates"
+					},
+					"response": []
 				}
-			],
-			"preRequestScript": null,
-			"pathVariables": {},
-			"pathVariableData": [],
-			"method": "GET",
-			"data": null,
-			"dataMode": "params",
-			"version": 2,
-			"tests": null,
-			"currentHelper": "normal",
-			"helperAttributes": {},
-			"time": 1668941373465,
-			"name": "Convert currency API",
-			"description": "send get request to get real time exchnage rates",
-			"collectionId": "5cca7314-a534-aa64-4306-4209006c4b81",
-			"responses": []
-		},
-		{
-			"id": "cbf70531-94ac-2d82-8e27-c6f805ff415c",
-			"headers": "apikey: {{apikey}}\n",
-			"headerData": [
-				{
-					"key": "apikey",
-					"value": "{{apikey}}",
-					"description": "",
-					"enabled": true
-				}
-			],
-			"url": "http://localhost:5249/api/rates?baseCurrency&symbols",
-			"folder": "a35eb816-d128-74ad-d550-985cd39184b7",
-			"queryParams": [
-				{
-					"key": "baseCurrency",
-					"value": "",
-					"equals": false,
-					"description": "",
-					"enabled": true
-				},
-				{
-					"key": "symbols",
-					"value": "",
-					"equals": false,
-					"description": "",
-					"enabled": true
-				}
-			],
-			"preRequestScript": null,
-			"pathVariables": {},
-			"pathVariableData": [],
-			"method": "GET",
-			"data": null,
-			"dataMode": "params",
-			"version": 2,
-			"tests": null,
-			"currentHelper": "normal",
-			"helperAttributes": {},
-			"time": 1668940810378,
-			"name": "get real time rates API",
-			"description": "send get request to get real time exchnage rates",
-			"collectionId": "5cca7314-a534-aa64-4306-4209006c4b81",
-			"responses": []
+			]
 		}
 	]
 }

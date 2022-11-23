@@ -1,7 +1,5 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using Microsoft.AspNetCore.Mvc;
-using System.Web;
-using CurrencyExchanger.Models;
 using Serilog;
 using CurrencyExchanger.Models.APIModels;
 using System.Text.Json;
@@ -9,6 +7,7 @@ using System.Net;
 using CurrencyExchanger.Repositories;
 using CurrencyExchanger.Models.Database;
 using CurrencyExchanger.Services;
+using CurrencyExchanger.Models.Constants;
 
 namespace CurrencyExchanger.Controllers
 {
@@ -27,40 +26,7 @@ namespace CurrencyExchanger.Controllers
         }
 
 
-        /// <summary>
-        /// integrate with ExchangRates API, that returns real-time exchange rate data updated every 60 minutes, every 10 minutes or every 60 seconds,
-        /// check the cache first and if the value exist and not outdated then the API return the response from the cache,
-        /// otherwise it sends request to the ExchangRates API.
-        /// </summary>
-        /// <param name="baseCurrency">Enter the three-letter currency code of your preferred base currency.</param>
-        /// <param name="symbols">Enter a list of comma-separated currency codes to limit output currencies.</param>
-        /// <returns>
-        /// success boolean, 
-        /// time stamp,
-        /// base currency,
-        /// date of the rates,
-        /// rates dictionary with currency symbol as a key and the rate as a value
-        /// </returns>
-        [HttpGet("rates")]
-        public async Task<ActionResult?> SendRequestToRealTimeRates([FromQuery] string? baseCurrency = null, [FromQuery] string? symbols = null)
-        {
-            try
-            {
-                var uriBuilder = new UriBuilder(_client.BaseAddress + "/latest");
-                var requestQueryStrings = HttpUtility.ParseQueryString(string.Empty);
-                requestQueryStrings["symbols"] = symbols;
-                requestQueryStrings["base"] = baseCurrency;
-                uriBuilder.Query = requestQueryStrings.ToString();
-                var response = await _client.GetAsync(uriBuilder.ToString());
-                var responseConent = await response.Content.ReadAsStringAsync();
-                return StatusCode((int)response.StatusCode, responseConent);
-            }
-            catch (Exception e)
-            {
-                Log.Error(e.ToString());
-                return BadRequest(new ResponseModel() { Message = "Something went wrong while sending API request"});
-            }
-        }
+
 
         /// <summary>
         /// Get Exchanges rate from cache and if not found send API request to retrieve the latest rates
@@ -72,32 +38,66 @@ namespace CurrencyExchanger.Controllers
         /// date of the rates,
         /// rates dictionary with currency symbol as a key and the rate as a value
         /// </returns>
-        private async Task<RatesResponseModel?> GetRealTimeRates([FromQuery] string? baseCurrency = null)
+
+        [HttpGet("rates")]
+        public async Task<ActionResult> GetRealTimeRates([FromQuery] string? baseCurrency = null, [FromQuery] string? symbols = null)
         {
             try
             {
-                var result = _cache.TryGetValue(CacheKeys.RealTimeRatesKey, out RatesResponseModel? realTimeRates);
+                var result = _cache.TryGetValue(CacheKeys.RealTimeRatesKey, out RatesResponseModel? cachedRealTimeRates);
+                RatesResponseModel? realTimeRates = cachedRealTimeRates?.Clone() as RatesResponseModel;
+                int statusCode = (int)HttpStatusCode.OK;
+                bool differentBase = !string.IsNullOrEmpty(baseCurrency) && realTimeRates?.baseCurrecny != baseCurrency;
+                string message = string.Empty;
                 if (result && realTimeRates != null)
-                    Log.Logger.Information("Rates Found in the Cache");
+                {
+                    message = ResponseMessages.FoundInCache;
+                    Log.Logger.Information("Rates" + message);
+                    if (!string.IsNullOrEmpty(symbols))
+                    {
+                        Log.Logger.Information("Specific symbols required, start filtering the rates to get required symbols");
+                        realTimeRates.FilterSymbols(symbols, baseCurrency);
+                    }
+                    if (differentBase)
+                    {
+                        Log.Logger.Information("Base currency is different from the cached rates, start calculating the new currency from the cached model");
+                        if (!realTimeRates.GetExchangeRatesForDifferentCurrency(baseCurrency))
+                            return BadRequest(new ResponseModel() { Message = "Cannot Get the base currency rate" });
+                    }
+                }
                 else
                 {
-                    Log.Logger.Information("Rates Not Found in the Cache");
+                    message = ResponseMessages.NotFoundInCache;
+                    Log.Logger.Information("Rates" + message);
 
-                    var response = await SendRequestToRealTimeRates(baseCurrency) as ObjectResult;
-                    realTimeRates = response?.StatusCode == (int)HttpStatusCode.OK && response?.Value != null ? JsonSerializer.Deserialize<RatesResponseModel>((string)response.Value) : null;
+                    var response = await _client.SendRequestToRealTimeRates(baseCurrency);
+                    statusCode = (int)response.statusCode;
+                    var responseContent = response.response?.ResponseObj;
 
+                    if (statusCode != (int)HttpStatusCode.OK)
+                        return StatusCode(statusCode, new ResponseModel() { ResponseObj = JsonSerializer.Deserialize<object?>((string?)responseContent)});
+
+                    RatesResponseModel LiveRealTimeRates = responseContent != null ? JsonSerializer.Deserialize<RatesResponseModel>((string)responseContent) : null;
+                    realTimeRates = LiveRealTimeRates == null ? null : (RatesResponseModel)LiveRealTimeRates.Clone();
+                    if (!string.IsNullOrEmpty(symbols))
+                    {
+                        Log.Logger.Information("Specific symbols required, start filtering the rates to get required symbols");
+                        realTimeRates?.FilterSymbols(symbols, baseCurrency);
+                    }
                     MemoryCacheEntryOptions cacheEntryOptions = new MemoryCacheEntryOptions()
-                        .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                        .SetPriority(CacheItemPriority.High)
+                        .SetSlidingExpiration(TimeSpan.FromMinutes(20))
                         .SetAbsoluteExpiration(TimeSpan.FromMinutes(29));
 
-                    _cache.Set(CacheKeys.ReferenceEquals, realTimeRates, cacheEntryOptions);
+                    _cache.Set(CacheKeys.RealTimeRatesKey, LiveRealTimeRates, cacheEntryOptions);
+
                 }
-                return realTimeRates;
+                return StatusCode(statusCode, new ResponseGeneric<RatesResponseModel>() { ResponseObj = realTimeRates, Message = message });
             }
             catch (Exception e)
             {
                 Log.Error(e.ToString());
-                return null;
+                return BadRequest(new ResponseModel() { Message = "Something went wrong while trying to get exchange rates" });
             }
         }
 
@@ -119,67 +119,57 @@ namespace CurrencyExchanger.Controllers
         /// and whether the exchange trade succeeded or not
         /// </returns>
         [HttpGet("exchange")]
-        public async Task<ActionResult> Convert([FromQuery] long clientId, [FromQuery] string amount, [FromQuery] string from, [FromQuery] string to)
+        public async Task<ActionResult> Convert([FromQuery] ConvertQueryParameters parameters)
         {
 
             try
             {
-                if (decimal.TryParse(amount, out decimal fromAmount))
+                if (!decimal.TryParse(parameters.amount, out decimal fromAmount))
                 {
                     string message = "amount not in a correct format";
                     Log.Error(message);
                     return BadRequest(new ResponseModel() { Message = message });
                 }
-                var clienttrades = _exchangeServiceRepo.GetClientExchangeTrades(clientId)?.Count(e => e.PerformedAt > DateTime.UtcNow.AddHours(-1));
+                var clienttrades = _exchangeServiceRepo.GetClientExchangeTrades(parameters.clientId)?.Count(e => e.PerformedAt > DateTime.UtcNow.AddHours(-1));
                 if (clienttrades >= 10)
                 {
-                    string message = $"client with id {clientId} exceeded the exchange trade amount per hour";
+                    string message = $"client with id {parameters.clientId} exceeded the exchange trade amount per hour";
                     Log.Information(message);
                     return BadRequest(new ResponseModel() { Message = message });
                 }
                 Exchange? exchange = new()
                 {
-                    ClientId = clientId,
-                    From = from,
-                    To = to,
+                    ClientId = parameters.clientId,
+                    From = parameters.from,
+                    To = parameters.to,
                     FromAmount = fromAmount,
                     PerformedAt = DateTime.UtcNow,
                 };
-                var exchangeRate = _cache.TryGetValue(CacheKeys.RealTimeRatesKey, out RatesResponseModel? realTimeRates) ? realTimeRates?.GetExchangeRate(from, to) : null;
+                var exchangeRate = _cache.TryGetValue(CacheKeys.RealTimeRatesKey, out RatesResponseModel? realTimeRates) ? realTimeRates?.GetExchangeRate(parameters.from, parameters.to) : null;
                 if (exchangeRate != null)
                 {
                     exchange.ToAmount = fromAmount * exchangeRate.Rate;
+                    exchange.Rate = exchangeRate.Rate;
                     exchange.Succeded = true;
                     _exchangeServiceRepo.AddExchnageTrade(exchange);
                 }
                 else
                 {
-                    realTimeRates = await GetRealTimeRates(from);
-                    exchangeRate = realTimeRates?.GetExchangeRate(from, to);
+                    var response = await GetRealTimeRates(parameters.from) as ObjectResult;
+                    realTimeRates = (response?.Value as ResponseGeneric<RatesResponseModel>)?.ResponseObj ?? null;
+                    exchangeRate = realTimeRates?.GetExchangeRate(parameters.from, parameters.to);
                     if (exchangeRate != null)
                     {
                         exchange.ToAmount = fromAmount * exchangeRate.Rate;
+                        exchange.Rate = exchangeRate.Rate;
                         exchange.Succeded = true;
                         _exchangeServiceRepo.AddExchnageTrade(exchange);
                     }
 
                 }
-                if (!exchange.Succeded) return Ok(new ResponseGeneric<Exchange>() { ResponseObj = exchange });
+                if (exchange.Succeded) return Ok(new ResponseGeneric<Exchange>() { ResponseObj = exchange });
                 else
                     return BadRequest(new ResponseGeneric<Exchange>() { ResponseObj = exchange, Message = "Something went wrong when trying to make exchange trade" });
-
-                //bool requestValid = decimal.TryParse(amount , out decimal decAmount) && !string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(to);
-
-                //var uriBuilder = new UriBuilder(_client.BaseAddress + "/convert");
-                //var requestQueryStrings = HttpUtility.ParseQueryString(string.Empty);
-                //requestQueryStrings["amount"] = amount;
-                //requestQueryStrings["from"] = from;
-                //requestQueryStrings["to"] = to;
-                //requestQueryStrings["date"] = date;
-                //uriBuilder.Query = requestQueryStrings.ToString();
-                //var response = await _client.GetAsync(uriBuilder.ToString());
-                //var responseConent = await response.Content.ReadAsStringAsync();
-                //return StatusCode((int)response.StatusCode, responseConent);
             }
             catch (Exception e)
             {

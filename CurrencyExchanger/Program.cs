@@ -24,7 +24,7 @@ builder.Host.UseSerilog((hostContext, services, configuration) =>
 builder.Services.AddMemoryCache();
 
 builder.Services.AddDbContext<ExchangeServiceDBContext>(opt => opt.UseSqlServer(configuration.GetSection("ConnectionString").Value));
-builder.Services.AddScoped<IExchangeServiceRepo>();
+builder.Services.AddScoped<IExchangeServiceRepo, ExchangeServiceRepo>();
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -38,6 +38,7 @@ builder.Services.AddHttpClient("ExchangeRatesAPI", client => {
     client.DefaultRequestHeaders.Add("apikey", "gTvO8ffdlaBNtTOzl2r6NECHPbgFExGL");
     });
 
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -46,7 +47,20 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+//Apply Migrations
+using (var scope = app.Services.CreateScope())
+{
+    var dataContext = scope.ServiceProvider.GetRequiredService<ExchangeServiceDBContext>();
+    try
+    {
+        dataContext.Database.Migrate();
 
+    }
+    catch (Exception)
+    {
+        
+    }
+}
 app.UseAuthorization();
 
 app.MapControllers();
