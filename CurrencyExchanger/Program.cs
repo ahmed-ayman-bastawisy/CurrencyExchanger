@@ -54,6 +54,7 @@ if (app.Environment.IsDevelopment())
 //    var dataContext = scope.ServiceProvider.GetRequiredService<ExchangeServiceDBContext>();
 //    try
 //    {
+//        Log.Information("Creating the database");
 //        dataContext.Database.Migrate();
 
 //    }
@@ -61,7 +62,7 @@ if (app.Environment.IsDevelopment())
 //    {
 
 //    }
-//} 
+//}
 #endregion
 
 app.UseAuthorization();
