@@ -1,12 +1,7 @@
-﻿USE [master]
+﻿
+CREATE DATABASE [ExchangeRate3]
 GO
-
-/****** Object:  Database [ExchangeRate]    Script Date: 21/11/2022 08:56:48 PM ******/
-CREATE DATABASE [ExchangeRate]
- 
-GO
-
-CREATE TABLE [ExchangeRate].[dbo].[exchanges](
+CREATE TABLE [ExchangeRate3].[dbo].[exchanges](
 	[Id] [bigint] IDENTITY(1,1) NOT NULL,
 	[ClientId] [bigint] NOT NULL,
 	[PerformedAt] [datetime2](7) NOT NULL,
